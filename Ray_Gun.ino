@@ -8,17 +8,6 @@
 #define SELECT_A_PIN 12
 #define SELECT_B_PIN 13
 
-/*
-   Table of sounds, laser times and laser brightness
-   format:
-    { Pin to trigger sound, laser brightness, laser fade up time, laser time on, laser fade down time }
-*/
-int soundsAndLasers[3][5] = {
-  {SOUND_1_PIN, 50, 150, 50, 150},
-  {SOUND_2_PIN, 125, 80, 000, 80},
-  {SOUND_3_PIN, 220, 5, 150, 5}
-};
-
 void setup() {
   Serial.begin(9600);
   Serial.println("startup");
@@ -36,6 +25,7 @@ void setup() {
   digitalWrite(SOUND_2_PIN, LOW);
   digitalWrite(SOUND_3_PIN, LOW);
   digitalWrite(A4, LOW);
+  digitalWrite(LASER_PIN, LOW);
 
   enableSoundie();
 
@@ -44,18 +34,18 @@ void setup() {
 void loop() {
   // All logic is inside a while loop to get good response from the trigger.
   if (digitalRead(TRIGGER_PIN) == LOW) {
-  Serial.println("trigger pulled");
+    Serial.println("trigger pulled");
     int selection = checkSelection();
-    playSound(selection);
     fireLaser(selection);
-    
+
     // fire only once in stun mode
-    if (selection == 0) {
+    if (selection == 1) {
       // fire only once in stun mode
       while (digitalRead(TRIGGER_PIN) == LOW) {
         delay(5);
       }
     }
+    delay(1500);
   }
 }
 
@@ -69,41 +59,77 @@ void enableSoundie() {
 int checkSelection() {
   int selection;
   if (digitalRead(SELECT_A_PIN) == LOW) {
-    selection = 2;
+    selection = 3;
   }
   else if (digitalRead(SELECT_B_PIN) == LOW) {
-    selection = 1;
+    selection = 2;
   }
   else {
-    selection = 0;
+    selection = 1;
   }
   return selection;
 }
 
 void playSound(int soundIndex) {
-  Serial.print("playing sound ");
+  Serial.print("playing sound: ");
   Serial.println(soundIndex);
-  digitalWrite(soundsAndLasers[soundIndex][0], HIGH);
-  delay(45);
-  digitalWrite(soundsAndLasers[soundIndex][0], LOW);
+  digitalWrite(SOUND_1_PIN, soundIndex & 0x01);
+  digitalWrite(SOUND_2_PIN, soundIndex & 0x02);
+  digitalWrite(SOUND_3_PIN, soundIndex & 0x04);
+  delay(55);
+  digitalWrite(SOUND_1_PIN, LOW);
+  digitalWrite(SOUND_2_PIN, LOW);
+  digitalWrite(SOUND_3_PIN, LOW);
 }
 
-void fireLaser(int laserIndex) {
-  Serial.print("firing laser ");
-  Serial.println(laserIndex);
-  int tempBrightness;
-  for ( int fade = 0; fade <= soundsAndLasers[laserIndex][2]; fade++) {
-    tempBrightness = map(fade, 0, soundsAndLasers[laserIndex][2], 0, soundsAndLasers[laserIndex][1]);
-    analogWrite(LASER_PIN, tempBrightness);
-    delayMicroseconds(900);
-  }
-  analogWrite(LASER_PIN, soundsAndLasers[laserIndex][1]);
-  delay(soundsAndLasers[laserIndex][3]);
+void fireLaser(int index) {
+  Serial.print("firing laser at brightness: ");
+  int brightness, pulses;
 
-  for ( int fade = soundsAndLasers[laserIndex][4]; fade >= 0; fade--) {
-    tempBrightness = map(fade, 0, soundsAndLasers[laserIndex][4], 0, soundsAndLasers[laserIndex][1]);
-    analogWrite(LASER_PIN, tempBrightness);
-    delayMicroseconds(900);
+  switch (index) {
+    // stun brightness
+    case 1:
+      brightness = 10;
+      pulses = 1;
+      break;
+
+    //kill brightness
+    case 2:
+      brightness = 20;
+      pulses = 5;
+      break;
+
+    // vaporize brightness
+    case 3:
+      brightness = 200;
+      pulses = 5;
+      break;
+  }
+
+  Serial.println(brightness);
+
+
+  playSound(index);
+  for (int pulse = 1; pulse <= pulses; pulse++) {
+    fadeLaserUp(brightness);
+    delay(170);
+    fadeLaserDown(brightness);
+  }
+  digitalWrite(LASER_PIN, LOW);
+
+}
+
+void fadeLaserUp(int maxBrightness) {
+  for (int currentBrightness = 0; currentBrightness <= maxBrightness; currentBrightness++) {
+    analogWrite(LASER_PIN, currentBrightness);
+    delayMicroseconds(50);
+  }
+}
+
+void fadeLaserDown(int maxBrightness) {
+  for (int currentBrightness = maxBrightness; currentBrightness >= 0; currentBrightness--) {
+    analogWrite(LASER_PIN, currentBrightness);
+    delayMicroseconds(50);
   }
 }
 
